@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+	<title>car</title>
+	<style>
+		*{margin: 0;padding: 0;}
+		html,body{ height: 100%; }
+		body{overflow:hidden;}
+		#stage{ position: absolute; height: auto; background: #ccc; }
+	</style>
+</head>
+<body>
+	<canvas id="stage" width="750" height="1300"></canvas>
+	<script src="https://cdn.bootcss.com/EaselJS/0.8.0/easeljs.min.js"></script>
+    <script src="https://cdn.bootcss.com/tweenjs/0.6.2/tweenjs.min.js"></script>
+    <script src="https://cdn.bootcss.com/SoundJS/0.6.0/soundjs.min.js"></script>
+    <script src="https://cdn.bootcss.com/PreloadJS/0.6.0/preloadjs.min.js"></script>
+    <script>
+    var loader=new createjs.LoadQueue(true,"./assets/");
+		loader.installPlugin(createjs.Sound);//加载声音插件，即可加载音频
+		loader.loadManifest([//配置加载资源
+			/**图片配置**/
+			{src:"img/_123go.png",id:"_123go"},
+			{src:"img/car_bg.png",id:"car"},
+			{src:"img/hinder.png",id:"hinder"},
+			{src:"img/playBtn.png",id:"play"},
+			{src:"img/paused.png",id:"paused"},
+			{src:"img/continue.png",id:"continue"},
+			{src:"img/replayBtn.png",id:"replay"},
+			{src:"img/map.jpg",id:"bg"}
+			/*声音*/
+			//{src:"sound/bg.mp3",id:"bg_sound"}
+		]);
+
+		//等资源全部加载完毕时触发
+		loader.on("complete",function(){
+			var oCar={
+				canvas:document.querySelector('#stage'),
+				car:null,
+				stage:new createjs.Stage("stage"),
+				speed:5,
+				playimg:null,
+				replayimg:null,
+				continueimg:null,
+				paused:null,
+				collisiondata:null,
+				funall:{},
+				hinderdata:[],
+				resize(){
+					var _this=this;
+					var viewW=document.documentElement.clientWidth;
+					var viewH=document.documentElement.clientHeight;
+					var cW=_this.canvas.width;
+					var cH=_this.canvas.height;
+					var cssW,cssBottom,cssLeft;
+					if(viewW>cW){
+						if((viewW/viewH)>cW/cH){
+							if(viewW<viewH){//平板
+								//width:cW; bottom:0/>0; left:>0;
+								console.log("平板")
+								var bottom=viewH-cH;
+								cssW=cW+"px";
+								cssBottom=(bottom>0?bottom/2:0)+"px";
+								cssLeft=(viewW-cW)/2+"px";
+							}
+							else{//pc
+								//width:cW/2; bottom:0/>0; left:>0;
+								console.log("pc")
+								var bottom=viewH-cH/2;
+								cssW=cW/2+"px";
+								cssBottom=(bottom>0?bottom/2:0)+"px";
+								cssLeft=(viewW-cW/2)/2+"px";
+							}
+						}
+					}
+					else{//手机
+						//width:100%;  bottom:0/>0; left:0;
+						//console.log("手机")
+						var bottom=viewH-cH*viewW/cW;
+						cssW="100%";
+						cssBottom=(bottom>0?bottom/2:0)+"px";
+						cssLeft="0px";
+					}
+					_this.canvas.setAttribute("style","width:"+cssW+";left:"+cssLeft+";bottom:"+cssBottom+";");
+				},
+				command(callback){
+					var _this=this;
+					
+					var commandimg=loader.getResult("_123go");
+					var commandSprite=new createjs.SpriteSheet({
+						images:[commandimg],
+						frames:{
+							regX:commandimg.width/8,
+							regY:commandimg.height/2,
+							width:commandimg.width/4,
+							height:commandimg.height,
+							count:4,
+						},
+						animations:{
+							ani_0:{
+								frames:[2],
+								next:null,
+								speed:0,
+							},
+							ani_1:{
+								frames:[1],
+								next:null,
+								speed:0,
+							},
+							ani_2:{
+								frames:[0],
+								next:null,
+								speed:0,
+							},
+							ani_3:{
+								frames:[3],
+								next:null,
+								speed:0,
+							}							
+							
+						}						
+						
+					});
+					
+					var aniarr=["ani_0","ani_1","ani_2","ani_3"]
+					var j=0;
+					
+					var str=new createjs.Sprite(commandSprite,"ani_0");
+						str.scaleX=1.4;
+						str.scaleY=1.4;
+						str.x=_this.canvas.width/2;
+						str.y=_this.canvas.height/2;
+						_this.stage.addChild(str);	
+					for(let i=0;i<aniarr.length;i++){
+						createjs.Tween.get(str).wait(i*1000).to({scaleX:1,scaleY:1},1000).call(function(){
+							//console.log("ani_"+i)
+							str.gotoAndPlay("ani_"+(i+1));	
+							if(i==aniarr.length-1){
+								createjs.Tween.get(str).set({alpha:0})
+								if(callback){
+									callback();
+								}
+							}
+						})		
+						
+					}
+		
+				},
+				game(){
+					var _this=this;
+					
+					var div=document.querySelector("div");
+					var section=document.querySelector("section");
+					var p=document.querySelector("p");
+					
+					
+					_this.playimg.addEventListener("mousedown",function(){
+						div.style.display="none";
+						
+						_this.command(function(){
+							createjs.Ticker.addEventListener("tick",_this.funall.creathinder)
+							createjs.Ticker.addEventListener("tick",_this.funall.bgmove)
+						});
+						
+					});
+					
+					
+					_this.replayimg.addEventListener("mousedown",function(){
+						div.style.display="none";						
+						location.reload(); 
+					});
+					
+					_this.paused.addEventListener("mousedown",function(){
+						section.style.display="flex";
+						createjs.Ticker.removeEventListener("tick",_this.funall.creathinder)
+						createjs.Ticker.removeEventListener("tick",_this.funall.bgmove)
+						
+					});
+					
+					_this.continueimg.addEventListener("mousedown",function(){
+						section.style.display="none";
+						createjs.Ticker.addEventListener("tick",_this.funall.creathinder)
+						createjs.Ticker.addEventListener("tick",_this.funall.bgmove)
+					});
+					
+					var direction;
+					var startx;
+					var endx;
+					_this.canvas.addEventListener("touchstart",function(e){
+						startx=e.changedTouches[0].clientX;
+					})
+					_this.canvas.addEventListener("touchmove",function(e){
+						//console.log(e.changedTouches[0])	
+					})
+					_this.canvas.addEventListener("touchend",function(e){
+						endx=e.changedTouches[0].clientX;
+						move();
+					})
+					function move(){						
+						if(endx<startx-20 && _this.car.x>374){
+							//_this.car.x=_this.car.x-170;
+							createjs.Tween.get(_this.car, {override:true}).to({x:_this.car.x-200},200);
+						}
+						else if(endx>startx+20 && _this.car.x<376){
+							//_this.car.x=_this.car.x+170;
+							createjs.Tween.get(_this.car, {override:true}).to({x:_this.car.x+200},200);
+						}
+					}
+					
+					function hit(){
+						_this.hit();
+					}
+					createjs.Ticker.addEventListener("tick",hit);
+					_this.funall.hit=hit;
+				},
+				hit(){
+					var _this=this;
+					for(var i=0;i<_this.hinderdata.length;i++){
+						var x=_this.hinderdata[i].x;						
+						var y=_this.hinderdata[i].y;
+						var w=_this.hinderdata[i].getBounds().width;
+						var h=_this.hinderdata[i].getBounds().height;
+						
+						var car_x=_this.car.x;
+						var car_y=_this.car.y;
+						var car_w=_this.car.getBounds().width;
+						var car_h=_this.car.getBounds().height;		
+						//console.log(x,y,h,w)
+						
+						var hinder=_this.hinderdata[i]
+						
+						if(hinder.currentAnimation=="ani_fire"||hinder.currentAnimation=="ani_sike"||hinder.currentAnimation=="ani_cask"){
+							var car_lt=hinder.globalToLocal(car_x,car_y);
+							var car_rt=hinder.globalToLocal(car_x+car_w/2,car_y);
+							var car_lb=hinder.globalToLocal(car_x,car_y+car_h);
+							var car_rb=hinder.globalToLocal(car_x+car_w/2,car_y+car_h);
+							
+							if(hinder.hitTest(car_lt.x,car_lt.y) || hinder.hitTest(car_rt.x,car_rt.y) || hinder.hitTest(car_lb.x,car_lb.y) || hinder.hitTest(car_lb.x,car_lb.y)){
+								createjs.Ticker.removeEventListener("tick",_this.funall.creathinder);
+								createjs.Ticker.removeEventListener("tick",_this.funall.bgmove);
+								createjs.Ticker.removeEventListener("tick",_this.funall.hit);
+								//console.log(132)
+								_this.turnover();
+							}
+
+						}
+						else if(hinder.currentAnimation=="ani_accelerate"){
+							var car_lt=hinder.globalToLocal(car_x-car_w/2,car_y-car_h/2);
+							var car_rt=hinder.globalToLocal(car_x+car_w/2,car_y-car_h/2);
+							var car_lb=hinder.globalToLocal(car_x-car_w/2,car_y+car_h/2);
+							var car_rb=hinder.globalToLocal(car_x+car_w/2,car_y+car_h/2);
+							
+							if(hinder.hitTest(car_lt.x,car_lt.y) || hinder.hitTest(car_rt.x,car_rt.y) || hinder.hitTest(car_lb.x,car_lb.y) || hinder.hitTest(car_lb.x,car_lb.y)){
+								//console.log("加速加速");
+								_this.speed=15;
+								setTimeout(function(){
+									_this.speed=5;
+								},5000)
+							}
+						}
+					}
+	
+					
+				},	
+				turnover(){
+					var _this=this;
+					createjs.Tween.get(_this.car).to({rotation:90},100);
+					
+					var p=document.querySelector("p");
+					p.setAttribute("style","display:flex;align-items:center;justify-content:center; position:fixed;width:100%; height:100%; left:0; top:0; background:rgba(0,0,0,0.6); z-index:99;");
+					
+				},
+				sence(){
+					var _this=this;
+					_this.playimg=loader.getResult("play");
+					_this.playimg.setAttribute("style","width:150px;");
+					var divNode=document.createElement("div")
+					divNode.setAttribute("style","display:flex; align-items:center;justify-content:center; position:fixed;width:100%; height:100%; left:0; top:0; background:rgba(0,0,0,0.6); z-index:99;");
+					divNode.appendChild(_this.playimg);
+					document.body.appendChild(divNode);	
+					
+					
+					_this.continueimg=loader.getResult("continue");
+					_this.continueimg.setAttribute("style","width:150px;");
+					var sectionNode=document.createElement("section")
+					sectionNode.setAttribute("style","display:none; align-items:center;justify-content:center; position:fixed;width:100%; height:100%; left:0; top:0; background:rgba(0,0,0,0.6); z-index:99;");
+					sectionNode.appendChild(_this.continueimg);
+					document.body.appendChild(sectionNode);	
+					
+					
+					_this.replayimg=loader.getResult("replay");
+					_this.replayimg.setAttribute("style","width:150px;");
+					var pNode=document.createElement("p")
+					pNode.setAttribute("style","display:none;align-items:center;justify-content:center; position:fixed;width:100%; height:100%; left:0; top:0; background:rgba(0,0,0,0.6); z-index:99;");
+					pNode.appendChild(_this.replayimg);
+					document.body.appendChild(pNode);
+					
+					_this.pausedimg=loader.getResult("paused");
+					_this.paused=new createjs.Bitmap(_this.pausedimg);
+					_this.paused.x=20;
+					_this.paused.y=20;
+					_this.stage.addChild(_this.paused);
+					
+					var hinderimg=loader.getResult("hinder");
+					var containerS = new createjs.Container();
+					var hinderSprite=new createjs.SpriteSheet({
+						images:[hinderimg],
+						frames:{
+							width:hinderimg.width/7,
+							height:hinderimg.height,
+							count:7,
+						},
+						animations:{
+							ani_fire:{
+								frames:[0],
+								next:"ani_fire",
+								speed:0,
+							},
+							ani_sike:{
+								frames:[1],
+								next:"ani_sike",
+								speed:0,
+							},
+							ani_cask:{
+								frames:[2],
+								next:"ani_cask",
+								speed:0,
+							},
+							ani_accelerate:{
+								frames:[3,4,5,6],
+								next:"ani_accelerate",
+								speed:0.1,
+							}
+							
+						}
+						
+						
+					});
+					/*var fire=new createjs.Sprite(hinderSprite,"ani_accelerate");
+					container.addChild(fire);
+					_this.stage.addChild(container);//将鸟放入舞台
+					_this.stage.update();*/
+					var distace=0;
+					//createjs.Ticker.addEventListener("tick",creathinder)
+						//containerS.y=containerS.y+10;
+						//_this.stage.update();
+										
+					function creathinder(){	
+						var hindername;
+						var sum=0;					
+						if(distace%1500==0){
+													
+							var randomN=Math.floor(Math.random()*10);
+							
+							if(randomN<=3){
+								hindername="ani_fire";
+							}
+							else if(randomN>=3&&randomN<=6){
+								hindername="ani_sike";
+							}
+							else if(randomN>=6&&randomN<=8){
+								hindername="ani_cask";
+							}
+							else{
+								hindername="ani_accelerate";
+							}
+							
+							var fire=new createjs.Sprite(hinderSprite,hindername);
+							
+							
+							if(Math.floor(Math.random()*3<=1)){
+								fire.x=80;
+							}
+							else if(Math.floor(Math.random()*3<=2)){
+								fire.x=300;							
+							}
+							else{
+								fire.x=520;
+							}
+																					
+							fire.y=-distace-hinderimg.height;
+							containerS.removeChild(containerS.children[0])
+							_this.hinderdata.shift(fire);
+							
+							containerS.addChild(fire);	
+							//console.log(containerS)	
+							_this.hinderdata.push(fire);
+							//console.log(_this.hinderdata)
+						}
+						
+						containerS.y=containerS.y+_this.speed;				
+						distace+=_this.speed;
+						
+					}	
+					_this.stage.addChild(containerS);
+					_this.funall.creathinder=creathinder;
+					//console.log(_this.funall)
+					
+				},
+				car(){
+					var _this=this;
+					var carimg=loader.getResult("car");
+					var container = new createjs.Container();//创建一个容器 
+					var carSprite=new createjs.SpriteSheet({
+						images:[carimg],//取图片节点
+						frames:{//帧配置
+							regX:carimg.width/8,
+							regY:carimg.height/2,
+							width:carimg.width/4,
+							height:carimg.height,
+							count:3,//图片有几帧
+						},
+						animations:{//动画的配置
+							ani_car:{
+								frames:[0,1,2],//精灵表每一帧的位置，按顺序做动画
+								next:"ani_car",//当精灵表动画完毕后的动作
+								speed:0.1//表示动画速度,值越小越慢
+							}
+						}
+					});
+					_this.car=new createjs.Sprite(carSprite,"ani_car");
+					_this.car.x=_this.canvas.width/2;
+					_this.car.y=(_this.canvas.height-carimg.height/2);
+					container.addChild(_this.car);
+					_this.stage.addChild(container);//将鸟放入舞台
+					//_this.stage.update();
+				},
+				bg(){
+					var _this=this;
+					var bgimg=loader.getResult("bg");
+					var container = new createjs.Container();//创建一个容器 					
+					var bgA=new createjs.Bitmap(bgimg);
+					var bgB=new createjs.Bitmap(bgimg);
+					container.addChild(bgA);
+					bgB.y=-_this.canvas.height;
+					container.addChild(bgB);
+					_this.stage.addChild(container);//将鸟放入舞台
+					_this.stage.update(container);
+					//createjs.Ticker.addEventListener("tick",bgmove)
+					function bgmove(){
+						//_this.stage.update()
+						container.y=container.y+_this.speed;
+						if(container.y>=_this.canvas.height){
+							container.y=0;
+						}
+					}
+					_this.funall.bgmove=bgmove;
+				},
+				init(){
+					var _this=this;
+					createjs.Ticker.setFPS(60);//配置fps
+					_this.resize();										
+					_this.bg();
+					_this.sence();
+					_this.car();
+					_this.game();
+					window.addEventListener("resize",function(){
+						_this.resize();
+					});
+					createjs.Ticker.addEventListener("tick",function(){
+						_this.stage.update()
+					});
+				}
+			};
+			oCar.init();
+		});
+    </script>
+</body>
+</html>
